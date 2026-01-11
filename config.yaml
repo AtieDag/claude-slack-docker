@@ -1,0 +1,23 @@
+# Slack Bridge Configuration
+
+slack:
+  # Tokens loaded from environment variables
+  # bot_token: SLACK_BOT_TOKEN (xoxb-...)
+  # app_token: SLACK_APP_TOKEN (xapp-...)
+  allowed_user_ids:
+    - "U0A8EHVA83B"  # Replace with your Slack user ID
+
+bridge:
+  host: "0.0.0.0"
+  port: 9876
+
+formatting:
+  mode: "full"  # full | compact | code-only
+  max_length: 3900  # Slack limit is 4000
+  long_output: "file"  # truncate | split | file
+  strip_ansi: true
+  preserve_code_blocks: true
+
+sessions:
+  channel_id: "C0A7Z381QFP"  # claude-slack
+  auto_archive_after: 0  # Disabled for single channel mode

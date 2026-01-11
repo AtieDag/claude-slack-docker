@@ -1,0 +1,51 @@
+services:
+  claude-bridge:
+    build: .
+    container_name: claude-slack-docker
+    restart: unless-stopped
+    ports:
+      - "9876:9876"
+    env_file:
+      - .env
+    environment:
+      - CLAUDE_WORKING_DIR=/workspace
+      - CLAUDE_SLACK_BRIDGE_URL=http://localhost:9876
+    volumes:
+      # Configuration
+      - ./config.yaml:/app/config.yaml:ro
+      - ./hooks:/app/hooks:ro
+
+      # Claude config directory (for API key, settings)
+      - claude-config:/root/.claude
+
+      # ============================================
+      # WORKSPACE VOLUME MOUNTS
+      # ============================================
+      # Mount your repos here. Each repo gets its own directory.
+      # Claude Code will have access to these directories.
+      #
+      # Format: /path/on/host:/workspace/name
+      #
+      # Examples (uncomment and modify):
+      # - ~/GitHub/my-project:/workspace/my-project
+      # - ~/GitHub/another-repo:/workspace/another-repo
+      # - ~/work/client-project:/workspace/client-project
+      # ============================================
+
+      # Default: mount the entire GitHub folder (convenient but less isolated)
+      # - ~/GitHub:/workspace
+
+      # Or mount specific repos individually:
+      # - ~/GitHub/repo1:/workspace/repo1
+      # - ~/GitHub/repo2:/workspace/repo2
+
+    # Increase shared memory for PTY operations
+    shm_size: '256m'
+
+    # Keep stdin open for PTY
+    stdin_open: true
+    tty: true
+
+volumes:
+  claude-config:
+    name: claude-slack-docker-config
