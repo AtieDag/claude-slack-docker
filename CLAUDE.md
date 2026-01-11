@@ -1,25 +1,18 @@
 # CLAUDE.md
 
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
 ## Project Overview
 
-**Claude Slack Bridge (Docker PTY Mode)** - Self-contained Docker solution running both the bridge AND Claude Code in a single container.
+**Claude Slack Bridge (Docker PTY Mode)** - A self-contained Docker solution that runs a FastAPI bridge and Claude Code in a single container, enabling bidirectional Slack communication.
 
 **Core Flow:**
 ```
-Slack message → Bridge → PTY stdin → Claude Code
+Slack message → Bridge (FastAPI) → PTY stdin → Claude Code
 Claude Code → Stop hook → localhost POST → Bridge → Slack
 ```
 
-**Key Features:**
-- Single container deployment
-- PTY-based input (no tmux)
-- Hooks POST to localhost
-- Volume-mounted workspaces
-- Auto-restart on crash
-
----
-
-## Quick Reference
+## Commands
 
 | Task | Command |
 |------|---------|
@@ -27,11 +20,9 @@ Claude Code → Stop hook → localhost POST → Bridge → Slack
 | Stop | `docker compose down` |
 | Rebuild | `docker compose up -d --build` |
 | Logs | `docker logs claude-slack-docker -f` |
-| Health | `curl http://localhost:9876/health` |
+| Health check | `curl http://localhost:9876/health` |
 | Status | `curl http://localhost:9876/status` |
 | Restart Claude | `curl -X POST http://localhost:9876/restart` |
-
----
 
 ## Architecture
 
@@ -49,155 +40,76 @@ Claude Code → Stop hook → localhost POST → Bridge → Slack
 │         └───────────────────────┘      │
 │                                        │
 │  /workspace (mounted volumes)          │
-│    ├── repo1/                          │
-│    ├── repo2/                          │
-│    └── ...                             │
 └────────────────────────────────────────┘
           │ WebSocket (Socket Mode)
           ▼
     Slack #channel
 ```
 
----
+**Key Components:**
 
-## Project Structure
+- `bridge/main.py` - FastAPI app with lifespan management, `/hook` and `/restart` endpoints
+- `bridge/pty_controller.py` - PTY fork/exec to spawn and manage Claude Code process
+- `bridge/slack_client.py` - Slack Socket Mode client with message callbacks
+- `hooks/slack_hook.py` - Stop hook that POSTs Claude's response to localhost bridge
+- `scripts/entrypoint.sh` - Container entrypoint: sets up hooks, verifies Claude, starts uvicorn
 
-```
-claude-slack-docker/
-├── bridge/                 # Python package
-│   ├── main.py            # FastAPI app (PTY mode)
-│   ├── pty_controller.py  # PTY management (replaces tmux.py)
-│   ├── slack_client.py    # Slack Socket Mode
-│   ├── session_manager.py # Session tracking
-│   ├── queue.py           # Message queue
-│   ├── formatter.py       # Slack formatting
-│   ├── config.py          # Configuration
-│   ├── models.py          # Pydantic models
-│   └── transcript.py      # Transcript parsing
-├── hooks/
-│   └── slack_hook.py      # Simplified hook (localhost POST)
-├── scripts/
-│   ├── entrypoint.sh      # Container entrypoint
-│   └── setup-hooks.sh     # Hook installer
-├── config.yaml            # Main config
-├── docker-compose.yml     # Docker services + volumes
-├── Dockerfile             # Container image
-└── slack-manifest.json    # Slack app manifest
-```
+**Message Flow:**
 
----
-
-## Key Differences from tmux Mode
-
-| Component | tmux Mode | Docker PTY Mode |
-|-----------|-----------|-----------------|
-| `tmux.py` | tmux subprocess calls | N/A (removed) |
-| `pty_controller.py` | N/A | PTY fork/exec |
-| Hooks | POST to host bridge | POST to localhost |
-| File access | Full host | Mounted volumes |
-| Claude lifecycle | External (user starts) | Managed by bridge |
-
----
+1. **Slack → Claude:** User message → SlackBridge callback → MessageQueue → PTYController.send_input()
+2. **Claude → Slack:** Claude finishes → Stop hook reads transcript → POST to `/hook` → SlackBridge.post_formatted()
 
 ## Configuration
 
-### .env (Required)
+### Required: `.env`
 
 ```bash
-SLACK_BOT_TOKEN=xoxb-your-token
-SLACK_APP_TOKEN=xapp-your-token
-ANTHROPIC_API_KEY=sk-ant-your-key
+SLACK_BOT_TOKEN=xoxb-...
+SLACK_APP_TOKEN=xapp-...
+ANTHROPIC_API_KEY=sk-ant-...
 CLAUDE_SLACK_BRIDGE_API_KEY=optional-security-key
 ```
 
-### config.yaml
+### Required: `config.yaml`
 
 ```yaml
+sessions:
+  channel_id: "C0XXXXXXXX"  # Slack channel ID (required)
+
 slack:
   allowed_user_ids: []  # Empty = allow all
 
 formatting:
-  mode: "full"
+  mode: "full"  # full | compact | code-only
   max_length: 3900
-  long_output: "file"
-  strip_ansi: true
-
-sessions:
-  channel_id: "C0XXXXXXXX"  # Required
+  long_output: "file"  # truncate | split | file
 ```
 
-### docker-compose.yml (Volume Mounts)
+### Workspace Volumes
+
+Edit `docker-compose.yml` to mount repositories:
 
 ```yaml
 volumes:
-  # Mount your repos here
-  - ~/GitHub/project1:/workspace/project1
-  - ~/GitHub/project2:/workspace/project2
+  - ~/GitHub/my-project:/workspace/my-project
 ```
 
----
+## Key Modification Points
 
-## Development
+| Change | File |
+|--------|------|
+| PTY behavior / Claude lifecycle | `bridge/pty_controller.py` |
+| API endpoints | `bridge/main.py` |
+| Hook logic / transcript parsing | `hooks/slack_hook.py` |
+| Slack message formatting | `bridge/formatter.py` |
+| Container startup | `scripts/entrypoint.sh` |
 
-### Key Files to Modify
+## How Stop Hooks Work
 
-| Task | File |
-|------|------|
-| Change PTY behavior | `bridge/pty_controller.py` |
-| Modify startup | `scripts/entrypoint.sh` |
-| Change hook behavior | `hooks/slack_hook.py` |
-| Add API endpoint | `bridge/main.py` |
-| Update formatting | `bridge/formatter.py` |
+1. Claude Code finishes a response
+2. Stop hook (`~/.claude/hooks/stop.py`) fires
+3. Hook reads transcript file to extract last assistant message
+4. Hook POSTs to `http://localhost:9876/hook` with the message
+5. Bridge receives via `/hook` endpoint and posts to Slack
 
-### Testing Changes
-
-```bash
-# Rebuild and restart
-docker compose up -d --build
-
-# Watch logs
-docker logs claude-slack-docker -f
-
-# Check status
-curl http://localhost:9876/status
-```
-
----
-
-## How It Works
-
-### Startup Sequence
-
-1. Container starts → `entrypoint.sh`
-2. Hooks installed to `~/.claude/hooks/`
-3. Bridge starts (uvicorn)
-4. Bridge spawns Claude Code via PTY
-5. Slack Socket Mode connects
-6. Ready for messages
-
-### Message Flow
-
-**Slack → Claude:**
-1. User sends message in Slack
-2. Bridge receives via Socket Mode
-3. Message queued
-4. Sent to Claude via PTY stdin
-
-**Claude → Slack:**
-1. Claude finishes responding
-2. Stop hook fires
-3. Hook reads transcript, extracts text
-4. POST to `http://localhost:9876/hook`
-5. Bridge formats and posts to Slack
-
----
-
-## Troubleshooting
-
-| Issue | Solution |
-|-------|----------|
-| Claude not running | `curl -X POST localhost:9876/restart` |
-| No files visible | Check volume mounts in docker-compose.yml |
-| Hook errors | Check container logs |
-| Slack not connecting | Verify tokens in .env |
-| API key errors | Check ANTHROPIC_API_KEY in .env |
+The hook uses MD5-based deduplication (stored in `~/.claude/hooks/.slack_hook_state`) to avoid posting the same message twice.
