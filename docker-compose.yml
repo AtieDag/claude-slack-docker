@@ -18,7 +18,7 @@ services:
       - ./hooks:/app/hooks:ro
 
       # Claude config directory (for API key, settings)
-      - claude-config:/root/.claude
+      - claude-config:/home/claude/.claude
 
       # ============================================
       # WORKSPACE VOLUME MOUNTS
@@ -43,6 +43,8 @@ services:
 
       # Mounted repos
       - ~/GitHub/claude-slack-bridge:/workspace/claude-slack-bridge
+      - ~/GitHub/ai-adhoc:/workspace/ai-adhoc
+      - ~/GitHub/claude-slack-docker:/workspace/claude-slack-docker
 
     # Increase shared memory for PTY operations
     shm_size: '256m'
