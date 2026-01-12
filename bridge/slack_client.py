@@ -2,7 +2,7 @@
 
 import logging
 import re
-from typing import Any, Callable, Dict, List, Optional, Set
+from typing import Any, Callable, Dict, List, Optional
 
 from slack_bolt import App
 from slack_bolt.adapter.socket_mode import SocketModeHandler
@@ -12,8 +12,6 @@ from .config import SlackConfig
 from .formatter import OutputFormatter
 
 logger = logging.getLogger(__name__)
-
-
 
 
 class SlackBridge:

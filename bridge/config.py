@@ -87,32 +87,26 @@ def load_config(config_path: Optional[str] = None) -> Config:
     return config
 
 
-def validate_slack_tokens(config: Config) -> list[str]:
-    """Validate Slack token formats and return list of errors.
+def _validate_token(token: str, name: str, prefix: str) -> Optional[str]:
+    """Validate a single token and return error message if invalid."""
+    if not token:
+        return f"{name} is required but not set."
+    if not token.startswith(prefix):
+        return (
+            f"{name} has invalid format. Expected '{prefix}...' but got "
+            f"'{token[:10]}...'. Check your token configuration."
+        )
+    return None
 
-    Returns an empty list if all tokens are valid.
-    """
+
+def validate_slack_tokens(config: Config) -> list[str]:
+    """Validate Slack token formats and return list of errors."""
     errors = []
 
-    # Validate bot token format (should start with xoxb-)
-    if config.slack.bot_token:
-        if not config.slack.bot_token.startswith("xoxb-"):
-            errors.append(
-                f"SLACK_BOT_TOKEN has invalid format. Expected 'xoxb-...' but got "
-                f"'{config.slack.bot_token[:10]}...'. Check your token configuration."
-            )
-    else:
-        errors.append("SLACK_BOT_TOKEN is required but not set.")
-
-    # Validate app token format (should start with xapp-)
-    if config.slack.app_token:
-        if not config.slack.app_token.startswith("xapp-"):
-            errors.append(
-                f"SLACK_APP_TOKEN has invalid format. Expected 'xapp-...' but got "
-                f"'{config.slack.app_token[:10]}...'. Check your token configuration."
-            )
-    else:
-        errors.append("SLACK_APP_TOKEN is required but not set.")
+    if err := _validate_token(config.slack.bot_token, "SLACK_BOT_TOKEN", "xoxb-"):
+        errors.append(err)
+    if err := _validate_token(config.slack.app_token, "SLACK_APP_TOKEN", "xapp-"):
+        errors.append(err)
 
     return errors
 

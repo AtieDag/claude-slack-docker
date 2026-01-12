@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import os
+import re
 import threading
 import time
 from contextlib import asynccontextmanager
@@ -86,7 +87,6 @@ def on_claude_output(text: str) -> None:
     # Log output for debugging - log everything to see full prompts
     if text:
         # Strip ANSI codes for cleaner logging
-        import re
         clean_text = re.sub(r'\x1b\[[0-9;]*[a-zA-Z]', '', text)
         # Log full output without truncation
         for line in clean_text.split('\n'):
@@ -290,8 +290,8 @@ async def restart_claude(
 async def get_status() -> JSONResponse:
     """Get detailed status."""
     session_data = None
-    if session_manager and session_manager.get_session():
-        session = session_manager.get_session()
+    session = session_manager.get_session() if session_manager else None
+    if session:
         session_data = {
             "session_id": session.session_id,
             "channel_id": session.slack_channel_id,

@@ -1,6 +1,5 @@
 """PTY controller for spawning and managing Claude Code."""
 
-import asyncio
 import fcntl
 import logging
 import os
@@ -8,9 +7,9 @@ import pty
 import select
 import signal
 import struct
-import subprocess
 import termios
 import threading
+import time
 from typing import Callable, Optional
 
 logger = logging.getLogger(__name__)
@@ -95,7 +94,6 @@ class PTYController:
                 logger.info(f"Started Claude Code with PID {self.pid}")
 
                 # Wait for Claude to initialize and handle initial prompts
-                import time
                 time.sleep(5)  # Give Claude more time to fully render prompts
 
                 # Handle prompts sequentially with proper timing
@@ -127,8 +125,6 @@ class PTYController:
             logger.error(f"Failed to start Claude Code: {e}")
             self._cleanup()
             return False
-
-        return False
 
     def _set_terminal_size(self, cols: int, rows: int) -> None:
         """Set the terminal size."""
@@ -168,7 +164,6 @@ class PTYController:
             # Send the text first
             os.write(self.master_fd, text.encode("utf-8"))
             # Small delay to ensure text is processed
-            import time
             time.sleep(0.1)
             # Send carriage return (Enter key) separately
             os.write(self.master_fd, b"\r")
@@ -223,7 +218,6 @@ class PTYController:
                             break
                     except ChildProcessError:
                         break
-                    import time
                     time.sleep(0.1)
                 else:
                     # Force kill if still running

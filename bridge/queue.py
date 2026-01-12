@@ -58,9 +58,6 @@ class MessageQueue:
                         self.queues[session_id].get(), timeout=60.0
                     )
                 except asyncio.TimeoutError:
-                    # Check if queue is empty and should be cleaned up
-                    if self.queues[session_id].empty():
-                        continue
                     continue
 
                 # Send message
