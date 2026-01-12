@@ -130,8 +130,8 @@ def main():
         print(json.dumps({"continue": False}))
         sys.exit(0)
 
-    # Add session info and message (no tmux in Docker mode)
-    hook_input["tmux_session"] = "pty"  # Fixed value for Docker PTY mode
+    # Add session info and message
+    hook_input["pty_session"] = "pty"  # Fixed value for Docker PTY mode
     hook_input["stop_hook_message"] = message
 
     # POST to bridge (localhost in Docker)

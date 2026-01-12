@@ -18,7 +18,7 @@ class HookEvent(BaseModel):
     tool_response: Optional[Dict[str, Any]] = None
     stop_hook_active: Optional[bool] = None
     stop_hook_message: Optional[str] = None  # Claude's response message
-    tmux_session: Optional[str] = None  # Added by hook script
+    pty_session: Optional[str] = None  # Added by hook script (legacy: tmux_session)
 
 
 class SlackMessage(BaseModel):
@@ -35,7 +35,7 @@ class SessionInfo(BaseModel):
     """Information about an active Claude session."""
 
     session_id: str
-    tmux_session: str
+    pty_session: str  # PTY session identifier
     slack_channel_id: str
     slack_channel_name: str
     created_at: datetime = Field(default_factory=datetime.utcnow)

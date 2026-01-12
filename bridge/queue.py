@@ -22,7 +22,7 @@ class MessageQueue:
         """Initialize the message queue.
 
         Args:
-            send_callback: Function to send message to tmux (session, message) -> success
+            send_callback: Function to send message to PTY (session, message) -> success
             delay_between_messages: Delay in seconds between processing messages
         """
         self.queues: Dict[str, asyncio.Queue] = {}

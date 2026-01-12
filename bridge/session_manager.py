@@ -24,26 +24,26 @@ class SessionManager:
     def register_session(
         self,
         session_id: str,
-        tmux_session: str,
+        pty_session: str = "pty",
     ) -> SessionInfo:
         """Register or update the active session.
 
         Args:
             session_id: Claude Code session ID
-            tmux_session: tmux session name
+            pty_session: PTY session identifier
 
         Returns:
             The created/updated SessionInfo
         """
         self.session = SessionInfo(
             session_id=session_id,
-            tmux_session=tmux_session,
+            pty_session=pty_session,
             slack_channel_id=self.channel_id,
             slack_channel_name="",  # Not used in single channel mode
         )
 
         logger.info(
-            f"Registered session: {session_id} -> tmux:{tmux_session} -> channel:{self.channel_id}"
+            f"Registered session: {session_id} -> pty:{pty_session} -> channel:{self.channel_id}"
         )
 
         return self.session
@@ -73,7 +73,7 @@ class SessionManager:
         return session
 
     def find_or_create_session_for_hook(
-        self, session_id: str, tmux_session: Optional[str] = None
+        self, session_id: str, pty_session: str = "pty"
     ) -> SessionInfo:
         """Find existing session or create a new one for a hook event.
 
@@ -90,5 +90,5 @@ class SessionManager:
         # Register new session (replaces any existing)
         return self.register_session(
             session_id=session_id,
-            tmux_session=tmux_session or "unknown",
+            pty_session=pty_session,
         )

@@ -121,7 +121,7 @@ Formats Claude's output for Slack:
 
 1. Run `setup-hooks.sh` to install hooks to `~/.claude/hooks/`
 2. Verify Claude Code is installed
-3. Check for `ANTHROPIC_API_KEY`
+3. Check for authentication (OAuth token or API key)
 4. Start uvicorn with `bridge.main:app`
 
 **File:** `bridge/main.py` (lifespan)
@@ -165,7 +165,7 @@ The stop hook reads Claude's transcript file to extract responses rather than ca
 |----------|---------|
 | `SLACK_BOT_TOKEN` | Slack API calls |
 | `SLACK_APP_TOKEN` | Socket Mode connection |
-| `ANTHROPIC_API_KEY` | Claude Code authentication |
+| `ANTHROPIC_API_KEY` | Claude Code auth (OAuth token `sk-ant-oat01-...` or API key) |
 | `CLAUDE_SLACK_BRIDGE_API_KEY` | Optional hook endpoint auth |
 | `CLAUDE_WORKING_DIR` | Working directory (default: `/workspace`) |
 
