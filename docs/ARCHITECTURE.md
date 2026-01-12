@@ -136,12 +136,12 @@ Formats Claude's output for Slack:
 
 ## Key Design Decisions
 
-### PTY vs tmux
+### PTY Process Management
 
-PTY mode directly forks and manages Claude Code, eliminating the tmux dependency. This simplifies deployment but means:
+The bridge directly forks and manages Claude Code via PTY:
 - Single Claude session per container
 - Bridge manages Claude lifecycle (auto-restart capability)
-- No external session attachment
+- Direct stdin/stdout communication
 
 ### Localhost Hook Communication
 

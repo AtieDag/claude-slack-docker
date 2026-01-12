@@ -1,6 +1,6 @@
 # Claude Slack Bridge (Docker PTY Mode)
 
-Bidirectional bridge between Claude Code and Slack, running entirely in Docker. Claude Code runs inside the container with PTY control - no tmux needed.
+Bidirectional bridge between Claude Code and Slack, running entirely in Docker. Claude Code runs inside the container with PTY control.
 
 ## Architecture
 
@@ -21,28 +21,12 @@ Bidirectional bridge between Claude Code and Slack, running entirely in Docker. 
        Slack
 ```
 
-## Key Differences from tmux Mode
+## Features
 
-| Aspect | tmux Mode | Docker PTY Mode |
-|--------|-----------|-----------------|
-| Claude runs | On host | In container |
-| Input method | tmux send-keys | PTY stdin |
-| File access | Full host | Mounted volumes only |
-| Dependencies | tmux, Python | Docker only |
-| Setup | Multiple steps | Single container |
-
-## Trade-offs
-
-**Pros:**
-- Self-contained (single Docker container)
-- No tmux dependency
+- Self-contained single Docker container
 - Auto-restart on crash
 - Isolated environment
-
-**Cons:**
-- Claude Code can only access mounted directories
-- Need to explicitly mount each repo
-- Container environment may differ from host
+- PTY-based communication with Claude Code
 
 ## Quick Start
 
