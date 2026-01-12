@@ -8,6 +8,10 @@ config.yaml
 # Claude local settings
 .claude/settings.local.json
 
+# Auto-generated hook files (created by setup script)
+.claude/hooks/
+.claude/settings.json
+
 # Python
 __pycache__/
 *.py[cod]
