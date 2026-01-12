@@ -1,11 +1,13 @@
 # Slack Bridge Configuration
+# Copy this file to config.yaml and update with your values
 
 slack:
   # Tokens loaded from environment variables
   # bot_token: SLACK_BOT_TOKEN (xoxb-...)
   # app_token: SLACK_APP_TOKEN (xapp-...)
   allowed_user_ids:
-    - "U0A8EHVA83B"  # Replace with your Slack user ID
+    - "U0XXXXXXXXX"  # Replace with your Slack user ID (find via Slack profile)
+    # - "U0YYYYYYYYY"  # Add more user IDs as needed
 
 bridge:
   host: "0.0.0.0"
@@ -19,13 +21,13 @@ formatting:
   preserve_code_blocks: true
 
 sessions:
-  # Multi-channel mode: map each channel to a repo
+  # Multi-channel mode: map each Slack channel to a repo
+  # Get channel IDs by right-clicking channel in Slack > "View channel details" > scroll to bottom
   channels:
-    "C0A7Z381QFP":  # claude-slack
-      repo: /workspace/claude-slack-bridge
-      name: "Claude Slack Bridge"
-    # Add more channels here:
-    # "C0YYYYYYYY":  # another-channel
+    "C0XXXXXXXXX":  # #your-channel-name
+      repo: /workspace/your-project
+      name: "Your Project"
+    # "C0YYYYYYYYY":  # #another-channel
     #   repo: /workspace/another-project
     #   name: "Another Project"
   default_repo: /workspace  # Fallback working directory
