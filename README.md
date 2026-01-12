@@ -24,6 +24,7 @@ Bidirectional bridge between Claude Code and Slack, running entirely in Docker. 
 ## Features
 
 - Self-contained single Docker container
+- **Multi-channel support** - Map each Slack channel to a different repo
 - Auto-restart on crash
 - Isolated environment
 - PTY-based communication with Claude Code
@@ -74,28 +75,32 @@ claude setup-token
 ```
 The OAuth token is valid for 1 year and works with Claude Code SDK.
 
-Edit `config.yaml`:
+Edit `config.yaml` to map channels to repos:
 ```yaml
 slack:
   allowed_user_ids:
     - "U0XXXXXXXX"  # Your Slack user ID
 
 sessions:
-  channel_id: "C0XXXXXXXX"  # Your Slack channel ID
+  channels:
+    "C0XXXXXXXX":  # #project-a channel
+      repo: /workspace/project-a
+      name: "Project A"
+    "C0YYYYYYYY":  # #project-b channel
+      repo: /workspace/project-b
+      name: "Project B"
+  default_repo: /workspace
 ```
 
 ### 4. Mount Your Repos
 
-Edit `docker-compose.yml` to mount your repositories:
+Edit `docker-compose.yml` to mount the repos referenced in config.yaml:
 
 ```yaml
 volumes:
-  # Mount specific repos
-  - ~/GitHub/my-project:/workspace/my-project
-  - ~/GitHub/another-repo:/workspace/another-repo
-
-  # Or mount entire directory
-  - ~/GitHub:/workspace
+  # Mount repos that match your channel config
+  - ~/GitHub/project-a:/workspace/project-a
+  - ~/GitHub/project-b:/workspace/project-b
 ```
 
 ### 5. Start
@@ -106,12 +111,12 @@ docker compose up -d
 
 ### 6. Use
 
-Send a message in your Slack channel. Claude Code will respond!
+Send a message in any configured Slack channel. Claude Code will:
+1. Automatically switch to the repo mapped to that channel
+2. Process your request
+3. Respond in the same channel
 
-To work on a specific repo, tell Claude:
-```
-cd /workspace/my-project
-```
+Each channel is isolated to its own repo - no need to `cd` manually.
 
 ## Commands
 
@@ -140,7 +145,11 @@ formatting:
   strip_ansi: true
 
 sessions:
-  channel_id: ""        # Required: Slack channel ID
+  channels:             # Map channels to repos
+    "C0XXXXXXXX":
+      repo: /workspace/my-project
+      name: "My Project"
+  default_repo: /workspace
 ```
 
 ### Environment Variables
@@ -207,18 +216,19 @@ docker logs claude-slack-docker -f
 
 ```
 claude-slack-docker/
-├── bridge/                 # Python package
-│   ├── main.py            # FastAPI app (PTY mode)
-│   ├── pty_controller.py  # PTY management
-│   ├── slack_client.py    # Slack Socket Mode
-│   ├── session_manager.py # Session tracking
-│   ├── formatter.py       # Slack formatting
+├── bridge/                    # Python package
+│   ├── main.py               # FastAPI app (PTY mode)
+│   ├── pty_controller.py     # PTY management
+│   ├── slack_client.py       # Slack Socket Mode
+│   ├── channel_registry.py   # Channel-to-repo mapping
+│   ├── session_manager.py    # Per-channel sessions
+│   ├── formatter.py          # Slack formatting
 │   └── ...
 ├── hooks/
-│   └── slack_hook.py      # Hook for localhost
+│   └── slack_hook.py         # Hook for localhost
 ├── scripts/
-│   ├── entrypoint.sh      # Container entrypoint
-│   └── setup-hooks.sh     # Hook installer
+│   ├── entrypoint.sh         # Container entrypoint
+│   └── setup-hooks.sh        # Hook installer
 ├── config.yaml
 ├── docker-compose.yml
 ├── Dockerfile

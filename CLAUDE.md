@@ -6,10 +6,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Claude Slack Bridge (Docker PTY Mode)** - A self-contained Docker solution that runs a FastAPI bridge and Claude Code in a single container, enabling bidirectional Slack communication.
 
-**Core Flow:**
+**Core Flow (Multi-Channel):**
 ```
-Slack message → Bridge (FastAPI) → PTY stdin → Claude Code
-Claude Code → Stop hook → localhost POST → Bridge → Slack
+Slack #channel-A → Bridge sets channel context → cd /workspace/repo-a → PTY stdin → Claude Code
+Claude Code → Stop hook reads channel → POST to /hook with target_channel → Bridge → Slack #channel-A
 ```
 
 ## Commands
@@ -27,37 +27,43 @@ Claude Code → Stop hook → localhost POST → Bridge → Slack
 ## Architecture
 
 ```
-┌─────────────────────────────────────────┐
-│ Docker Container                        │
-│                                         │
-│  ┌─────────────┐    PTY    ┌─────────┐ │
-│  │ Bridge      │◄─────────►│ Claude  │ │
-│  │ (FastAPI)   │           │ Code    │ │
-│  │ :9876       │           │         │ │
-│  └──────┬──────┘           └────┬────┘ │
-│         │                       │      │
-│         │ Hook POST (localhost) │      │
-│         └───────────────────────┘      │
-│                                        │
-│  /workspace (mounted volumes)          │
-└────────────────────────────────────────┘
+┌──────────────────────────────────────────────┐
+│ Docker Container                             │
+│                                              │
+│  ┌─────────────┐    PTY    ┌─────────┐      │
+│  │ Bridge      │◄─────────►│ Claude  │      │
+│  │ (FastAPI)   │           │ Code    │      │
+│  │ :9876       │           │         │      │
+│  └──────┬──────┘           └────┬────┘      │
+│         │                       │           │
+│         │ Hook POST (localhost) │           │
+│         └───────────────────────┘           │
+│                                             │
+│  Channel Registry:                          │
+│    #channel-A → /workspace/repo-a           │
+│    #channel-B → /workspace/repo-b           │
+│                                             │
+│  /workspace (mounted volumes)               │
+└─────────────────────────────────────────────┘
           │ WebSocket (Socket Mode)
           ▼
-    Slack #channel
+    Slack #channel-A, #channel-B, ...
 ```
 
 **Key Components:**
 
 - `bridge/main.py` - FastAPI app with lifespan management, `/hook` and `/restart` endpoints
+- `bridge/channel_registry.py` - Maps Slack channels to repo paths, tracks current channel
 - `bridge/pty_controller.py` - PTY fork/exec to spawn and manage Claude Code process
-- `bridge/slack_client.py` - Slack Socket Mode client with message callbacks
-- `hooks/slack_hook.py` - Stop hook that POSTs Claude's response to localhost bridge
+- `bridge/slack_client.py` - Slack Socket Mode client with multi-channel support
+- `bridge/session_manager.py` - Per-channel session tracking
+- `hooks/slack_hook.py` - Stop hook that reads channel context and POSTs to localhost bridge
 - `scripts/entrypoint.sh` - Container entrypoint: sets up hooks, verifies Claude, starts uvicorn
 
 **Message Flow:**
 
-1. **Slack → Claude:** User message → SlackBridge callback → MessageQueue → PTYController.send_input()
-2. **Claude → Slack:** Claude finishes → Stop hook reads transcript → POST to `/hook` → SlackBridge.post_formatted()
+1. **Slack → Claude:** User message in #channel-A → SlackBridge validates channel → Set current channel context → cd to repo-a → MessageQueue → PTYController.send_input()
+2. **Claude → Slack:** Claude finishes → Stop hook reads channel from state file → POST to `/hook` with target_channel → SlackBridge.post_formatted_to_channel()
 
 ## Configuration
 
@@ -74,7 +80,14 @@ CLAUDE_SLACK_BRIDGE_API_KEY=optional-security-key
 
 ```yaml
 sessions:
-  channel_id: "C0XXXXXXXX"  # Slack channel ID (required)
+  channels:
+    "C0XXXXXXXX":  # #project-a channel
+      repo: /workspace/project-a
+      name: "Project A"
+    "C0YYYYYYYY":  # #project-b channel
+      repo: /workspace/project-b
+      name: "Project B"
+  default_repo: /workspace
 
 slack:
   allowed_user_ids: []  # Empty = allow all
@@ -87,20 +100,22 @@ formatting:
 
 ### Workspace Volumes
 
-Edit `docker-compose.yml` to mount repositories:
+Edit `docker-compose.yml` to mount repos that match your channel config:
 
 ```yaml
 volumes:
-  - ~/GitHub/my-project:/workspace/my-project
+  - ~/GitHub/project-a:/workspace/project-a
+  - ~/GitHub/project-b:/workspace/project-b
 ```
 
 ## Key Modification Points
 
 | Change | File |
 |--------|------|
+| Channel-to-repo mapping | `bridge/channel_registry.py` |
 | PTY behavior / Claude lifecycle | `bridge/pty_controller.py` |
-| API endpoints | `bridge/main.py` |
-| Hook logic / transcript parsing | `hooks/slack_hook.py` |
+| API endpoints / orchestration | `bridge/main.py` |
+| Hook logic / channel routing | `hooks/slack_hook.py` |
 | Slack message formatting | `bridge/formatter.py` |
 | Container startup | `scripts/entrypoint.sh` |
 
@@ -109,7 +124,8 @@ volumes:
 1. Claude Code finishes a response
 2. Stop hook (`~/.claude/hooks/stop.py`) fires
 3. Hook reads transcript file to extract last assistant message
-4. Hook POSTs to `http://localhost:9876/hook` with the message
-5. Bridge receives via `/hook` endpoint and posts to Slack
+4. Hook reads current channel from `~/.claude/hooks/.current_channel` (written by bridge)
+5. Hook POSTs to `http://localhost:9876/hook` with `target_channel` and message
+6. Bridge receives via `/hook` endpoint and posts to the correct Slack channel
 
 The hook uses MD5-based deduplication (stored in `~/.claude/hooks/.slack_hook_state`) to avoid posting the same message twice.

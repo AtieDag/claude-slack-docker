@@ -21,6 +21,9 @@ BRIDGE_URL = os.environ.get("CLAUDE_SLACK_BRIDGE_URL", "http://localhost:9876")
 # State file to track last sent message (avoid duplicates)
 STATE_FILE = os.path.expanduser("~/.claude/hooks/.slack_hook_state")
 
+# Channel state file - written by bridge to indicate target channel for responses
+CHANNEL_STATE_FILE = os.path.expanduser("~/.claude/hooks/.current_channel")
+
 
 def get_message_hash(message: str) -> str:
     """Get a hash of the message for deduplication."""
@@ -57,6 +60,21 @@ def mark_message_sent(message: str) -> None:
             f.write(get_message_hash(message))
     except (IOError, OSError) as e:
         print(f"Warning: Failed to write dedup state file: {e}", file=sys.stderr)
+
+
+def get_current_channel() -> str:
+    """Read the current target channel from state file.
+
+    The bridge writes this file when processing incoming messages,
+    so we know which channel to route responses to.
+    """
+    try:
+        if os.path.exists(CHANNEL_STATE_FILE):
+            with open(CHANNEL_STATE_FILE, "r") as f:
+                return f.read().strip()
+    except (IOError, OSError) as e:
+        print(f"Warning: Failed to read channel state: {e}", file=sys.stderr)
+    return ""
 
 
 def get_last_assistant_message(transcript_path: str) -> str:
@@ -130,9 +148,10 @@ def main():
         print(json.dumps({"continue": False}))
         sys.exit(0)
 
-    # Add session info and message
+    # Add session info, message, and target channel
     hook_input["pty_session"] = "pty"  # Fixed value for Docker PTY mode
     hook_input["stop_hook_message"] = message
+    hook_input["target_channel"] = get_current_channel()  # Channel to route response to
 
     # POST to bridge (localhost in Docker)
     try:

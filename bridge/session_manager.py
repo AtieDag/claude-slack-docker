@@ -1,94 +1,81 @@
-"""Session management for Claude Slack Bridge (single session mode)."""
+"""Session management for Claude Slack Bridge (multi-channel mode)."""
 
 import logging
+from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Optional
-
-from .models import SessionInfo
+from typing import Dict, Optional
 
 logger = logging.getLogger(__name__)
 
 
+@dataclass
+class ChannelSession:
+    """Session info for a single channel."""
+
+    channel_id: str
+    repo_path: str
+    last_activity: datetime = field(default_factory=datetime.utcnow)
+    message_count: int = 0
+
+
 class SessionManager:
-    """Manage the single active Claude session."""
+    """Manage sessions across multiple channels."""
 
-    def __init__(self, channel_id: str):
-        """Initialize the session manager.
-
-        Args:
-            channel_id: The single Slack channel ID for all messages
-        """
-        self.channel_id = channel_id
-        self.session: Optional[SessionInfo] = None
-
-    def register_session(
-        self,
-        session_id: str,
-        pty_session: str = "pty",
-    ) -> SessionInfo:
-        """Register or update the active session.
+    def __init__(self, channel_configs: Dict[str, str]):
+        """Initialize with channel-to-repo mappings.
 
         Args:
-            session_id: Claude Code session ID
-            pty_session: PTY session identifier
-
-        Returns:
-            The created/updated SessionInfo
+            channel_configs: Dict of channel_id -> repo_path
         """
-        self.session = SessionInfo(
-            session_id=session_id,
-            pty_session=pty_session,
-            slack_channel_id=self.channel_id,
-            slack_channel_name="",  # Not used in single channel mode
-        )
+        self.sessions: Dict[str, ChannelSession] = {}
+        self.channel_configs = channel_configs
+        self.current_channel: Optional[str] = None
 
-        logger.info(
-            f"Registered session: {session_id} -> pty:{pty_session} -> channel:{self.channel_id}"
-        )
+    def get_or_create_session(self, channel_id: str) -> Optional[ChannelSession]:
+        """Get or create a session for a channel."""
+        if channel_id not in self.channel_configs:
+            logger.warning(f"Unknown channel: {channel_id}")
+            return None
 
-        return self.session
+        if channel_id not in self.sessions:
+            self.sessions[channel_id] = ChannelSession(
+                channel_id=channel_id, repo_path=self.channel_configs[channel_id]
+            )
+            logger.info(
+                f"Created session for channel {channel_id} -> {self.channel_configs[channel_id]}"
+            )
 
-    def get_session(self) -> Optional[SessionInfo]:
-        """Get the current active session."""
-        return self.session
+        return self.sessions[channel_id]
 
-    def get_channel_id(self) -> str:
-        """Get the configured channel ID."""
-        return self.channel_id
+    def update_activity(self, channel_id: str) -> None:
+        """Update last activity for a channel."""
+        if channel_id in self.sessions:
+            self.sessions[channel_id].last_activity = datetime.utcnow()
+            self.sessions[channel_id].message_count += 1
 
-    def update_activity(self) -> None:
-        """Update the last activity timestamp for the session."""
-        if self.session:
-            self.session.last_activity = datetime.utcnow()
+    def set_current_channel(self, channel_id: str) -> None:
+        """Set the currently active channel."""
+        self.current_channel = channel_id
 
-    def clear_session(self) -> Optional[SessionInfo]:
-        """Clear the current session.
+    def get_current_channel(self) -> Optional[str]:
+        """Get the currently active channel."""
+        return self.current_channel
 
-        Returns the cleared session info, or None if no session was active.
-        """
-        session = self.session
-        self.session = None
+    def get_repo_for_channel(self, channel_id: str) -> Optional[str]:
+        """Get the repo path for a channel."""
+        return self.channel_configs.get(channel_id)
+
+    def get_session(self, channel_id: str) -> Optional[ChannelSession]:
+        """Get session for a specific channel."""
+        return self.sessions.get(channel_id)
+
+    def get_all_sessions(self) -> Dict[str, ChannelSession]:
+        """Get all active sessions."""
+        return self.sessions.copy()
+
+    def clear_session(self, channel_id: str) -> Optional[ChannelSession]:
+        """Clear session for a specific channel."""
+        session = self.sessions.pop(channel_id, None)
         if session:
-            logger.info(f"Cleared session: {session.session_id}")
+            logger.info(f"Cleared session for channel: {channel_id}")
         return session
-
-    def find_or_create_session_for_hook(
-        self, session_id: str, pty_session: str = "pty"
-    ) -> SessionInfo:
-        """Find existing session or create a new one for a hook event.
-
-        In single session mode, we always update to the incoming session.
-
-        Returns:
-            The session info (always returns a valid session)
-        """
-        # If we have a session with the same ID, just update activity
-        if self.session and self.session.session_id == session_id:
-            self.update_activity()
-            return self.session
-
-        # Register new session (replaces any existing)
-        return self.register_session(
-            session_id=session_id,
-            pty_session=pty_session,
-        )

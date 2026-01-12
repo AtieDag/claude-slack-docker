@@ -8,6 +8,7 @@ from slack_bolt import App
 from slack_bolt.adapter.socket_mode import SocketModeHandler
 from slack_sdk.errors import SlackApiError
 
+from .channel_registry import ChannelRegistry
 from .config import SlackConfig
 from .formatter import OutputFormatter
 
@@ -21,18 +22,18 @@ class SlackBridge:
         self,
         config: SlackConfig,
         formatter: OutputFormatter,
-        channel_id: str,
+        channel_registry: ChannelRegistry,
     ):
         """Initialize the Slack bridge.
 
         Args:
             config: Slack configuration
             formatter: Output formatter for messages
-            channel_id: The single channel ID for all messages
+            channel_registry: Registry of channel-to-repo mappings
         """
         self.config = config
         self.formatter = formatter
-        self.channel_id = channel_id
+        self.channel_registry = channel_registry
         self.allowed_users = set(config.allowed_user_ids)
 
         # Initialize Slack app
@@ -52,25 +53,27 @@ class SlackBridge:
         def handle_message(event: Dict[str, Any], say: Callable) -> None:
             """Handle incoming messages from Slack channels."""
             # Log all incoming events for debugging
-            logger.info(f"Slack event received: channel={event.get('channel')}, user={event.get('user')}, subtype={event.get('subtype')}")
+            logger.info(
+                f"Slack event received: channel={event.get('channel')}, "
+                f"user={event.get('user')}, subtype={event.get('subtype')}"
+            )
 
             # Ignore bot messages
             if event.get("bot_id") or event.get("subtype"):
-                logger.debug(f"Ignoring bot/subtype message")
+                logger.debug("Ignoring bot/subtype message")
                 return
 
             user = event.get("user")
             channel = event.get("channel")
 
             if not self._validate_incoming(user, channel):
-                logger.info(f"Message filtered: expected channel {self.channel_id}, got {channel}")
                 return
 
             text = event.get("text", "")
             if not text.strip():
                 return
 
-            logger.info(f"Received message from {user}: {text[:50]}...")
+            logger.info(f"Received message from {user} in {channel}: {text[:50]}...")
 
             if self.on_message_callback:
                 self.on_message_callback(channel, user, text)
@@ -125,7 +128,7 @@ class SlackBridge:
 
         Checks:
         - User is in allowed list (or list is empty)
-        - Channel matches configured channel
+        - Channel is in our registered channels
 
         Args:
             user: User ID from the event
@@ -138,8 +141,8 @@ class SlackBridge:
             logger.debug(f"Ignoring action from unauthorized user: {user}")
             return False
 
-        if channel != self.channel_id:
-            logger.debug(f"Ignoring action from other channel: {channel}")
+        if not self.channel_registry.is_registered_channel(channel):
+            logger.debug(f"Ignoring action from unregistered channel: {channel}")
             return False
 
         return True
@@ -147,39 +150,88 @@ class SlackBridge:
     def post_message(
         self,
         text: str,
+        channel_id: Optional[str] = None,
         blocks: Optional[List[Dict[str, Any]]] = None,
         thread_ts: Optional[str] = None,
     ) -> Optional[str]:
-        """Post a message to the configured Slack channel.
+        """Post a message to a Slack channel.
+
+        Args:
+            text: Message text
+            channel_id: Channel to post to (uses current channel if not specified)
+            blocks: Optional Slack blocks
+            thread_ts: Optional thread timestamp for replies
 
         Returns the message timestamp (ts), or None if posting failed.
         """
+        if not channel_id:
+            channel_id = self.channel_registry.get_current_channel()
+
+        if not channel_id:
+            logger.error("No channel specified and no current channel set")
+            return None
+
         try:
             response = self.app.client.chat_postMessage(
-                channel=self.channel_id,
+                channel=channel_id,
                 text=text,
                 blocks=blocks,
                 thread_ts=thread_ts,
             )
             return response.get("ts")
         except SlackApiError as e:
-            logger.error(f"Failed to post message: {e}")
+            logger.error(f"Failed to post message to {channel_id}: {e}")
             return None
+
+    def post_to_channel(
+        self,
+        channel_id: str,
+        text: str,
+        blocks: Optional[List[Dict[str, Any]]] = None,
+        thread_ts: Optional[str] = None,
+    ) -> Optional[str]:
+        """Post a message to a specific channel.
+
+        Returns the message timestamp (ts), or None if posting failed.
+        """
+        return self.post_message(
+            text=text,
+            channel_id=channel_id,
+            blocks=blocks,
+            thread_ts=thread_ts,
+        )
 
     def post_formatted(
         self,
         content: str,
+        channel_id: Optional[str] = None,
         event_type: str = "message",
         thread_ts: Optional[str] = None,
     ) -> Optional[str]:
-        """Post formatted content to the Slack channel.
+        """Post formatted content to a Slack channel.
 
         Uses the formatter to create proper Slack blocks.
         """
         formatted = self.formatter.format(content, event_type)
         return self.post_message(
             text=formatted.text,
+            channel_id=channel_id,
             blocks=formatted.blocks,
+            thread_ts=thread_ts,
+        )
+
+    def post_formatted_to_channel(
+        self,
+        channel_id: str,
+        content: str,
+        event_type: str = "message",
+        thread_ts: Optional[str] = None,
+    ) -> Optional[str]:
+        """Post formatted content to a specific channel."""
+        return self.post_formatted(
+            content=content,
+            channel_id=channel_id,
+            event_type=event_type,
             thread_ts=thread_ts,
         )
 
@@ -187,12 +239,14 @@ class SlackBridge:
         self,
         question: str,
         options: List[str],
+        channel_id: Optional[str] = None,
         thread_ts: Optional[str] = None,
     ) -> Optional[str]:
         """Post an interactive question with buttons."""
         blocks = self.formatter.format_interactive_question(question, options)
         return self.post_message(
             text=question,
+            channel_id=channel_id,
             blocks=blocks,
             thread_ts=thread_ts,
         )
@@ -200,6 +254,7 @@ class SlackBridge:
     def upload_file(
         self,
         content: str,
+        channel_id: Optional[str] = None,
         filename: str = "output.txt",
         title: str = "Full Output",
     ) -> bool:
@@ -207,23 +262,41 @@ class SlackBridge:
 
         Used for long output that exceeds message limits.
         """
+        if not channel_id:
+            channel_id = self.channel_registry.get_current_channel()
+
+        if not channel_id:
+            logger.error("No channel specified and no current channel set")
+            return False
+
         try:
             self.app.client.files_upload_v2(
-                channel=self.channel_id,
+                channel=channel_id,
                 content=content,
                 filename=filename,
                 title=title,
             )
             return True
         except SlackApiError as e:
-            logger.error(f"Failed to upload file: {e}")
+            logger.error(f"Failed to upload file to {channel_id}: {e}")
             return False
 
-    def join_channel(self) -> bool:
-        """Join the configured channel (needed to post to it)."""
+    def join_channel(self, channel_id: str) -> bool:
+        """Join a specific channel."""
         try:
-            self.app.client.conversations_join(channel=self.channel_id)
+            self.app.client.conversations_join(channel=channel_id)
+            logger.info(f"Joined channel: {channel_id}")
             return True
         except SlackApiError as e:
-            logger.error(f"Failed to join channel {self.channel_id}: {e}")
+            logger.error(f"Failed to join channel {channel_id}: {e}")
             return False
+
+    def join_all_channels(self) -> Dict[str, bool]:
+        """Join all registered channels.
+
+        Returns a dict of channel_id -> success status.
+        """
+        results = {}
+        for channel_id in self.channel_registry.get_channel_ids():
+            results[channel_id] = self.join_channel(channel_id)
+        return results

@@ -173,6 +173,23 @@ class PTYController:
             logger.error(f"Failed to send input: {e}")
             return False
 
+    def change_directory(self, path: str) -> bool:
+        """Change Claude's working directory by sending a cd command."""
+        if not self.running or self.master_fd is None:
+            logger.warning("Cannot change directory: Claude Code not running")
+            return False
+
+        try:
+            cd_command = f"cd {path}"
+            os.write(self.master_fd, cd_command.encode("utf-8"))
+            time.sleep(0.1)
+            os.write(self.master_fd, b"\r")
+            logger.info(f"Changed Claude working directory to: {path}")
+            return True
+        except OSError as e:
+            logger.error(f"Failed to change directory: {e}")
+            return False
+
     def get_output(self, clear: bool = True) -> str:
         """Get accumulated output from buffer."""
         with self._lock:
@@ -261,6 +278,7 @@ class PTYManager:
     _instance: Optional["PTYManager"] = None
     _controller: Optional[PTYController] = None
     _session_id: Optional[str] = None
+    _current_dir: Optional[str] = None
 
     @classmethod
     def get_instance(cls) -> "PTYManager":
@@ -328,3 +346,26 @@ class PTYManager:
         """Get the session ID."""
         instance = cls.get_instance()
         return instance._session_id
+
+    @classmethod
+    def change_directory(cls, path: str) -> bool:
+        """Change Claude's working directory."""
+        instance = cls.get_instance()
+        if instance._controller:
+            success = instance._controller.change_directory(path)
+            if success:
+                instance._current_dir = path
+            return success
+        return False
+
+    @classmethod
+    def get_current_directory(cls) -> Optional[str]:
+        """Get current working directory."""
+        instance = cls.get_instance()
+        return instance._current_dir
+
+    @classmethod
+    def set_current_directory(cls, path: str) -> None:
+        """Set current directory without sending cd command."""
+        instance = cls.get_instance()
+        instance._current_dir = path

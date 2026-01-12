@@ -19,6 +19,7 @@ class HookEvent(BaseModel):
     stop_hook_active: Optional[bool] = None
     stop_hook_message: Optional[str] = None  # Claude's response message
     pty_session: Optional[str] = None  # Added by hook script
+    target_channel: Optional[str] = None  # Channel to post response to
 
 
 class SlackMessage(BaseModel):

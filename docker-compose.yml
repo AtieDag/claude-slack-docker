@@ -41,6 +41,9 @@ services:
       # - ~/GitHub/repo1:/workspace/repo1
       # - ~/GitHub/repo2:/workspace/repo2
 
+      # Mounted repos
+      - ~/GitHub/claude-slack-bridge:/workspace/claude-slack-bridge
+
     # Increase shared memory for PTY operations
     shm_size: '256m'
 

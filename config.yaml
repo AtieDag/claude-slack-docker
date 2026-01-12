@@ -19,5 +19,14 @@ formatting:
   preserve_code_blocks: true
 
 sessions:
-  channel_id: "C0A7Z381QFP"  # claude-slack
-  auto_archive_after: 0  # Disabled for single channel mode
+  # Multi-channel mode: map each channel to a repo
+  channels:
+    "C0A7Z381QFP":  # claude-slack
+      repo: /workspace/claude-slack-bridge
+      name: "Claude Slack Bridge"
+    # Add more channels here:
+    # "C0YYYYYYYY":  # another-channel
+    #   repo: /workspace/another-project
+    #   name: "Another Project"
+  default_repo: /workspace  # Fallback working directory
+  auto_archive_after: 0
