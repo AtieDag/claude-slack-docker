@@ -19,9 +19,15 @@ fi
 
 echo "Claude Code version: $(claude --version 2>/dev/null || echo 'unknown')"
 
-# Check for Anthropic API key
-if [ -z "$ANTHROPIC_API_KEY" ]; then
-    echo "WARNING: ANTHROPIC_API_KEY not set. Claude Code may not work."
+# Check for authentication (OAuth token preferred over API key)
+if [ -n "$CLAUDE_CODE_OAUTH_TOKEN" ]; then
+    echo "Using Claude Code OAuth token for authentication"
+    # Unset ANTHROPIC_API_KEY to force OAuth token usage
+    unset ANTHROPIC_API_KEY
+elif [ -n "$ANTHROPIC_API_KEY" ]; then
+    echo "Using Anthropic API key for authentication"
+else
+    echo "WARNING: No authentication configured. Set ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN."
 fi
 
 # Show workspace contents

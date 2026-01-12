@@ -83,9 +83,15 @@ def handle_slack_message(channel: str, user: str, text: str) -> None:
 
 def on_claude_output(text: str) -> None:
     """Handle output from Claude Code (for debugging)."""
-    # Log output for debugging
-    if text.strip():
-        logger.debug(f"Claude output: {text[:100]}...")
+    # Log output for debugging - log everything to see full prompts
+    if text:
+        # Strip ANSI codes for cleaner logging
+        import re
+        clean_text = re.sub(r'\x1b\[[0-9;]*[a-zA-Z]', '', text)
+        # Log full output without truncation
+        for line in clean_text.split('\n'):
+            if line.strip():
+                logger.info(f"Claude PTY: {line}")
 
 
 @asynccontextmanager
@@ -238,14 +244,23 @@ async def receive_hook(
         # 1. Try stop_hook_message (direct from hook)
         if event.stop_hook_message:
             output = event.stop_hook_message
+            logger.info(f"Got stop_hook_message: {output[:100]}...")
 
         # 2. Try reading from transcript file
         if not output and event.transcript_path:
+            logger.info(f"Reading transcript from: {event.transcript_path}")
             output = get_last_assistant_message(event.transcript_path)
+            if output:
+                logger.info(f"Got transcript message: {output[:100]}...")
+            else:
+                logger.warning("No message found in transcript")
 
         # Post to Slack if we have content
         if output and output.strip():
+            logger.info(f"Posting to Slack: {output[:100]}...")
             slack.post_formatted(output, event_type="stop")
+        else:
+            logger.warning("No output to post to Slack")
 
     return JSONResponse({"status": "ok"})
 
@@ -274,9 +289,41 @@ async def restart_claude(
 @app.get("/status")
 async def get_status() -> JSONResponse:
     """Get detailed status."""
+    session_data = None
+    if session_manager and session_manager.get_session():
+        session = session_manager.get_session()
+        session_data = {
+            "session_id": session.session_id,
+            "channel_id": session.slack_channel_id,
+            "created_at": session.created_at.isoformat() if session.created_at else None,
+            "last_activity": session.last_activity.isoformat() if session.last_activity else None,
+        }
     return JSONResponse({
         "claude_running": PTYManager.is_running(),
         "slack_connected": slack is not None,
-        "session": session_manager.get_session().model_dump() if session_manager and session_manager.get_session() else None,
+        "session": session_data,
         "working_dir": os.environ.get("CLAUDE_WORKING_DIR", "/workspace"),
     })
+
+
+@app.post("/test")
+async def send_test_message(
+    x_api_key: Optional[str] = Header(None),
+) -> JSONResponse:
+    """Send a test message to Slack."""
+    verify_api_key(x_api_key)
+
+    if not slack:
+        return JSONResponse(
+            {"status": "error", "message": "Slack not connected"},
+            status_code=503
+        )
+
+    try:
+        slack.post_message(":white_check_mark: Test message from Claude Slack Bridge!")
+        return JSONResponse({"status": "ok", "message": "Test message sent"})
+    except Exception as e:
+        return JSONResponse(
+            {"status": "error", "message": str(e)},
+            status_code=500
+        )

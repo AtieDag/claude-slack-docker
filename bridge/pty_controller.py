@@ -73,7 +73,7 @@ class PTYController:
                 env["TERM"] = "xterm-256color"
                 env["HOME"] = os.environ.get("HOME", "/root")
 
-                # Execute Claude Code
+                # Execute Claude Code - interactive mode
                 os.execvpe("claude", ["claude"], env)
 
             else:
@@ -93,6 +93,34 @@ class PTYController:
                 self._reader_thread.start()
 
                 logger.info(f"Started Claude Code with PID {self.pid}")
+
+                # Wait for Claude to initialize and handle initial prompts
+                import time
+                time.sleep(5)  # Give Claude more time to fully render prompts
+
+                # Handle prompts sequentially with proper timing
+                try:
+                    # First Enter for trust dialog (cursor is on "Yes, proceed")
+                    os.write(self.master_fd, b"\r")
+                    logger.info("Sent Enter for trust dialog")
+                    time.sleep(2)  # Wait for API key prompt
+
+                    # API key dialog has "No" selected by default - move UP to "Yes"
+                    os.write(self.master_fd, b"\x1b[A")  # Up arrow
+                    logger.info("Sent Up arrow to select 'Yes' for API key")
+                    time.sleep(0.3)
+
+                    # Enter to confirm API key
+                    os.write(self.master_fd, b"\r")
+                    logger.info("Sent Enter for API key dialog")
+                    time.sleep(3)
+
+                    # Additional Enter for any other prompts
+                    os.write(self.master_fd, b"\r")
+                    logger.info("Sent additional Enter")
+                except OSError:
+                    pass
+
                 return True
 
         except Exception as e:
@@ -137,9 +165,13 @@ class PTYController:
             return False
 
         try:
-            # Send the text followed by newline
-            data = (text + "\n").encode("utf-8")
-            os.write(self.master_fd, data)
+            # Send the text first
+            os.write(self.master_fd, text.encode("utf-8"))
+            # Small delay to ensure text is processed
+            import time
+            time.sleep(0.1)
+            # Send carriage return (Enter key) separately
+            os.write(self.master_fd, b"\r")
             logger.info(f"Sent input to Claude Code: {text[:50]}...")
             return True
         except OSError as e:
@@ -191,7 +223,8 @@ class PTYController:
                             break
                     except ChildProcessError:
                         break
-                    asyncio.get_event_loop().run_until_complete(asyncio.sleep(0.1))
+                    import time
+                    time.sleep(0.1)
                 else:
                     # Force kill if still running
                     os.kill(self.pid, signal.SIGKILL)

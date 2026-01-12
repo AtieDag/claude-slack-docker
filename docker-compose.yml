@@ -10,6 +10,8 @@ services:
     environment:
       - CLAUDE_WORKING_DIR=/workspace
       - CLAUDE_SLACK_BRIDGE_URL=http://localhost:9876
+      # Use OAuth token for Claude Code SDK authentication
+      - CLAUDE_CODE_OAUTH_TOKEN=${ANTHROPIC_API_KEY}
     volumes:
       # Configuration
       - ./config.yaml:/app/config.yaml:ro

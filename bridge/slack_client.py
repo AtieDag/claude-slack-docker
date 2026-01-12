@@ -53,14 +53,19 @@ class SlackBridge:
         @self.app.event("message")
         def handle_message(event: Dict[str, Any], say: Callable) -> None:
             """Handle incoming messages from Slack channels."""
+            # Log all incoming events for debugging
+            logger.info(f"Slack event received: channel={event.get('channel')}, user={event.get('user')}, subtype={event.get('subtype')}")
+
             # Ignore bot messages
             if event.get("bot_id") or event.get("subtype"):
+                logger.debug(f"Ignoring bot/subtype message")
                 return
 
             user = event.get("user")
             channel = event.get("channel")
 
             if not self._validate_incoming(user, channel):
+                logger.info(f"Message filtered: expected channel {self.channel_id}, got {channel}")
                 return
 
             text = event.get("text", "")

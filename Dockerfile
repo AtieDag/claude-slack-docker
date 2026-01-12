@@ -34,19 +34,25 @@ COPY config.yaml .
 # Make scripts executable
 RUN chmod +x /app/scripts/*.sh /app/hooks/*.py
 
-# Create workspace directory (will be mounted)
-RUN mkdir -p /workspace
+# Create a non-root user for running Claude Code
+RUN useradd -m -s /bin/bash claude && \
+    mkdir -p /workspace && \
+    chown -R claude:claude /workspace /app
 
-# Create Claude config directory
-RUN mkdir -p /root/.claude/hooks
+# Create Claude config directory for the claude user
+RUN mkdir -p /home/claude/.claude/hooks && \
+    chown -R claude:claude /home/claude/.claude
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH=/app
 ENV CLAUDE_WORKING_DIR=/workspace
 ENV CLAUDE_SLACK_BRIDGE_URL=http://localhost:9876
-ENV HOME=/root
+ENV HOME=/home/claude
 ENV TERM=xterm-256color
+
+# Switch to non-root user
+USER claude
 
 # Expose the bridge port
 EXPOSE 9876
