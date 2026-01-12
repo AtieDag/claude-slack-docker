@@ -8,7 +8,8 @@ from typing import Dict, Optional
 
 logger = logging.getLogger(__name__)
 
-CHANNEL_STATE_FILE = os.path.expanduser("~/.claude/hooks/.current_channel")
+# Fallback global state file for backward compatibility
+GLOBAL_CHANNEL_STATE_FILE = os.path.expanduser("~/.claude/hooks/.current_channel")
 
 
 @dataclass
@@ -57,22 +58,47 @@ class ChannelRegistry:
         """Set the current active channel for response routing."""
         with self._lock:
             self._current_channel = channel_id
-            self._write_channel_state(channel_id)
-            logger.debug(f"Set current channel to {channel_id}")
+            # Get repo path for this channel to write state to per-repo location
+            repo_path = self.get_repo_for_channel(channel_id)
+            self._write_channel_state(channel_id, repo_path)
+            logger.debug(f"Set current channel to {channel_id} (repo: {repo_path})")
 
     def get_current_channel(self) -> Optional[str]:
         """Get the current active channel."""
         with self._lock:
             return self._current_channel
 
-    def _write_channel_state(self, channel_id: str) -> None:
-        """Write current channel to state file for hook to read."""
+    def _write_channel_state(
+        self, channel_id: str, repo_path: Optional[str] = None
+    ) -> None:
+        """Write current channel to state file for hook to read.
+
+        Writes to per-repo .claude/hooks/.current_channel if repo_path is provided
+        and the .claude/hooks directory exists, otherwise falls back to global.
+        """
+        # Determine state file location
+        if repo_path:
+            repo_state_dir = os.path.join(repo_path, ".claude", "hooks")
+            if os.path.isdir(repo_state_dir):
+                state_file = os.path.join(repo_state_dir, ".current_channel")
+                logger.debug(f"Writing channel state to per-repo: {state_file}")
+            else:
+                # Per-repo .claude/hooks doesn't exist, use global
+                state_file = GLOBAL_CHANNEL_STATE_FILE
+                logger.debug(
+                    f"Per-repo .claude/hooks not found at {repo_state_dir}, "
+                    f"using global: {state_file}"
+                )
+        else:
+            state_file = GLOBAL_CHANNEL_STATE_FILE
+            logger.debug(f"No repo path, using global state file: {state_file}")
+
         try:
-            os.makedirs(os.path.dirname(CHANNEL_STATE_FILE), exist_ok=True)
-            with open(CHANNEL_STATE_FILE, "w") as f:
+            os.makedirs(os.path.dirname(state_file), exist_ok=True)
+            with open(state_file, "w") as f:
                 f.write(channel_id)
         except OSError as e:
-            logger.error(f"Failed to write channel state: {e}")
+            logger.error(f"Failed to write channel state to {state_file}: {e}")
 
     def get_all_channels(self) -> Dict[str, ChannelContext]:
         """Get all registered channels."""

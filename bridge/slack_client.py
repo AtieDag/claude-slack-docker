@@ -288,8 +288,45 @@ class SlackBridge:
             logger.info(f"Joined channel: {channel_id}")
             return True
         except SlackApiError as e:
-            logger.error(f"Failed to join channel {channel_id}: {e}")
+            if "missing_scope" in str(e) or "channel_not_found" in str(e):
+                logger.warning(
+                    f"Cannot join channel {channel_id}: {e}. "
+                    "Invite the bot manually with /invite @BotName"
+                )
+            else:
+                logger.error(f"Failed to join channel {channel_id}: {e}")
             return False
+
+    def create_channel(self, name: str) -> Optional[str]:
+        """Create a new public channel.
+
+        Returns the channel ID if successful, None otherwise.
+        """
+        # Sanitize channel name (lowercase, no spaces, max 80 chars)
+        clean_name = name.lower().replace(" ", "-")[:80]
+        try:
+            response = self.app.client.conversations_create(name=clean_name)
+            channel_id = response["channel"]["id"]
+            logger.info(f"Created channel #{clean_name} ({channel_id})")
+            return channel_id
+        except SlackApiError as e:
+            if "name_taken" in str(e):
+                logger.info(f"Channel #{clean_name} already exists")
+                # Try to find the existing channel
+                return self.find_channel_by_name(clean_name)
+            logger.error(f"Failed to create channel {clean_name}: {e}")
+            return None
+
+    def find_channel_by_name(self, name: str) -> Optional[str]:
+        """Find a channel ID by name."""
+        try:
+            response = self.app.client.conversations_list(types="public_channel")
+            for channel in response.get("channels", []):
+                if channel["name"] == name:
+                    return channel["id"]
+        except SlackApiError as e:
+            logger.error(f"Failed to list channels: {e}")
+        return None
 
     def join_all_channels(self) -> Dict[str, bool]:
         """Join all registered channels.

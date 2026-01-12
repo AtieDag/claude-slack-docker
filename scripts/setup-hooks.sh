@@ -5,15 +5,43 @@ set -e
 
 HOOK_DIR="$HOME/.claude/hooks"
 SETTINGS_FILE="$HOME/.claude/settings.json"
+WORKSPACE_DIR="/workspace"
 
 echo "Setting up Claude Code hooks..."
 
-# Create hooks directory
+# Create global hooks directory
 mkdir -p "$HOOK_DIR"
 
-# Copy hook script
+# Copy hook script to global location
 cp /app/hooks/slack_hook.py "$HOOK_DIR/"
 chmod +x "$HOOK_DIR/slack_hook.py"
+
+# Initialize per-repo .claude/hooks directories
+echo "Initializing per-repo .claude/hooks directories..."
+if [ -d "$WORKSPACE_DIR" ]; then
+    for repo_dir in "$WORKSPACE_DIR"/*/; do
+        if [ -d "$repo_dir" ]; then
+            repo_name=$(basename "$repo_dir")
+            repo_hook_dir="${repo_dir}.claude/hooks"
+
+            echo "  Setting up hooks in: $repo_dir"
+            mkdir -p "$repo_hook_dir"
+
+            # Copy hook script to per-repo location
+            cp /app/hooks/slack_hook.py "$repo_hook_dir/"
+            chmod +x "$repo_hook_dir/slack_hook.py"
+
+            # Create per-repo trust settings
+            repo_projects_dir="${repo_dir}.claude"
+            cat > "$repo_projects_dir/settings.json" << 'EOF'
+{
+  "trusted": true
+}
+EOF
+            echo "    Created: $repo_hook_dir"
+        fi
+    done
+fi
 
 # Create or update settings.json with hook configuration
 if [ -f "$SETTINGS_FILE" ]; then

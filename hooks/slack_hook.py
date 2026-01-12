@@ -18,11 +18,34 @@ import urllib.request
 # Bridge URL - always localhost in Docker mode
 BRIDGE_URL = os.environ.get("CLAUDE_SLACK_BRIDGE_URL", "http://localhost:9876")
 
-# State file to track last sent message (avoid duplicates)
-STATE_FILE = os.path.expanduser("~/.claude/hooks/.slack_hook_state")
 
-# Channel state file - written by bridge to indicate target channel for responses
-CHANNEL_STATE_FILE = os.path.expanduser("~/.claude/hooks/.current_channel")
+def get_repo_claude_dir() -> str:
+    """Get the .claude directory for the current repo.
+
+    Uses CLAUDE_REPO_ROOT env var if set, otherwise uses current working directory.
+    Falls back to global ~/.claude if per-repo doesn't exist.
+    """
+    # Check for explicit repo root from environment
+    repo_root = os.environ.get("CLAUDE_REPO_ROOT", os.getcwd())
+    repo_claude_dir = os.path.join(repo_root, ".claude", "hooks")
+
+    # If per-repo .claude/hooks exists, use it
+    if os.path.isdir(repo_claude_dir):
+        return repo_claude_dir
+
+    # Fall back to global ~/.claude/hooks for backward compatibility
+    global_claude_dir = os.path.expanduser("~/.claude/hooks")
+    return global_claude_dir
+
+
+def get_state_file() -> str:
+    """Get the state file path for deduplication."""
+    return os.path.join(get_repo_claude_dir(), ".slack_hook_state")
+
+
+def get_channel_state_file() -> str:
+    """Get the channel state file path."""
+    return os.path.join(get_repo_claude_dir(), ".current_channel")
 
 
 def get_message_hash(message: str) -> str:
@@ -36,10 +59,11 @@ def is_duplicate_message(message: str) -> bool:
         return True
 
     current_hash = get_message_hash(message)
+    state_file = get_state_file()
 
     try:
-        if os.path.exists(STATE_FILE):
-            with open(STATE_FILE, "r") as f:
+        if os.path.exists(state_file):
+            with open(state_file, "r") as f:
                 last_hash = f.read().strip()
                 if last_hash == current_hash:
                     return True
@@ -54,9 +78,10 @@ def mark_message_sent(message: str) -> None:
     if not message:
         return
 
+    state_file = get_state_file()
     try:
-        os.makedirs(os.path.dirname(STATE_FILE), exist_ok=True)
-        with open(STATE_FILE, "w") as f:
+        os.makedirs(os.path.dirname(state_file), exist_ok=True)
+        with open(state_file, "w") as f:
             f.write(get_message_hash(message))
     except (IOError, OSError) as e:
         print(f"Warning: Failed to write dedup state file: {e}", file=sys.stderr)
@@ -68,9 +93,10 @@ def get_current_channel() -> str:
     The bridge writes this file when processing incoming messages,
     so we know which channel to route responses to.
     """
+    channel_state_file = get_channel_state_file()
     try:
-        if os.path.exists(CHANNEL_STATE_FILE):
-            with open(CHANNEL_STATE_FILE, "r") as f:
+        if os.path.exists(channel_state_file):
+            with open(channel_state_file, "r") as f:
                 return f.read().strip()
     except (IOError, OSError) as e:
         print(f"Warning: Failed to read channel state: {e}", file=sys.stderr)

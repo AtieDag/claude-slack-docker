@@ -122,10 +122,34 @@ volumes:
 ## How Stop Hooks Work
 
 1. Claude Code finishes a response
-2. Stop hook (`~/.claude/hooks/stop.py`) fires
+2. Stop hook fires (registered in `~/.claude/settings.json`)
 3. Hook reads transcript file to extract last assistant message
-4. Hook reads current channel from `~/.claude/hooks/.current_channel` (written by bridge)
+4. Hook reads current channel from `.claude/hooks/.current_channel` (per-repo, written by bridge)
 5. Hook POSTs to `http://localhost:9876/hook` with `target_channel` and message
 6. Bridge receives via `/hook` endpoint and posts to the correct Slack channel
 
-The hook uses MD5-based deduplication (stored in `~/.claude/hooks/.slack_hook_state`) to avoid posting the same message twice.
+The hook uses MD5-based deduplication (stored in `.claude/hooks/.slack_hook_state`) to avoid posting the same message twice.
+
+### Per-Repo .claude Support
+
+Each repo mounted under `/workspace` gets its own `.claude/` directory:
+
+```
+/workspace/project-a/
+├── .claude/
+│   ├── hooks/
+│   │   ├── slack_hook.py      # Hook script (copied at container start)
+│   │   ├── .current_channel   # Channel routing state (written by bridge)
+│   │   └── .slack_hook_state  # Message dedup state (written by hook)
+│   └── settings.json          # Per-repo trust settings
+│   └── CLAUDE.md              # Optional: repo-specific instructions for Claude
+├── src/
+└── ...
+```
+
+**Benefits:**
+- Each repo can have its own `CLAUDE.md` with repo-specific instructions
+- State files are isolated per-repo (no cross-channel state pollution)
+- Supports per-repo plugins and settings
+
+**Fallback:** If per-repo `.claude/hooks/` doesn't exist, the hook falls back to global `~/.claude/hooks/`.

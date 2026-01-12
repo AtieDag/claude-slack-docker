@@ -193,13 +193,30 @@ async def lifespan(app: FastAPI):
     # Set up callback
     slack.on_message_callback = handle_slack_message
 
-    # Join all configured channels
-    join_results = slack.join_all_channels()
-    for channel_id, success in join_results.items():
-        if success:
+    # Join or create configured channels
+    for channel_id, channel_cfg in config.sessions.channels.items():
+        if slack.join_channel(channel_id):
             logger.info(f"Joined channel: {channel_id}")
-        else:
-            logger.error(f"Failed to join channel: {channel_id}")
+        elif channel_cfg.name:
+            # Try to create the channel if we have a name
+            logger.info(f"Attempting to create channel: {channel_cfg.name}")
+            new_channel_id = slack.create_channel(channel_cfg.name)
+            if new_channel_id:
+                # Update registry with new channel ID if different
+                if new_channel_id != channel_id:
+                    logger.info(
+                        f"Channel created/found with ID {new_channel_id}. "
+                        f"Update config.yaml to use this ID."
+                    )
+                    channel_registry.register_channel(
+                        new_channel_id, channel_cfg.repo, channel_cfg.name
+                    )
+                    channel_configs[new_channel_id] = channel_cfg.repo
+            else:
+                logger.warning(
+                    f"Could not join or create channel for {channel_cfg.name}. "
+                    "Invite the bot manually with /invite @BotName"
+                )
 
     # Start Slack in background thread
     slack_thread = threading.Thread(target=slack.start, daemon=True)
