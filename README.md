@@ -72,12 +72,23 @@ Create `.env` file:
 SLACK_BOT_TOKEN=xoxb-your-bot-token
 SLACK_APP_TOKEN=xapp-your-app-token
 
-# Required: Anthropic API key for Claude Code
-ANTHROPIC_API_KEY=sk-ant-your-key
+# Required: Claude Code authentication (choose one)
+# Option 1: OAuth token from Claude Code SDK (recommended)
+ANTHROPIC_API_KEY=sk-ant-oat01-your-oauth-token
+
+# Option 2: Standard Anthropic API key
+# ANTHROPIC_API_KEY=sk-ant-api03-your-api-key
 
 # Optional: API key for hook security
 CLAUDE_SLACK_BRIDGE_API_KEY=your-secret-key
 ```
+
+**Getting an OAuth Token:**
+```bash
+# Run this command and copy the token starting with sk-ant-oat01-
+claude setup-token
+```
+The OAuth token is valid for 1 year and works with Claude Code SDK.
 
 Edit `config.yaml`:
 ```yaml
@@ -154,8 +165,10 @@ sessions:
 |----------|----------|-------------|
 | `SLACK_BOT_TOKEN` | Yes | Bot token (`xoxb-...`) |
 | `SLACK_APP_TOKEN` | Yes | App token (`xapp-...`) |
-| `ANTHROPIC_API_KEY` | Yes | For Claude Code |
+| `ANTHROPIC_API_KEY` | Yes | OAuth token (`sk-ant-oat01-...`) or API key (`sk-ant-api03-...`) |
 | `CLAUDE_SLACK_BRIDGE_API_KEY` | No | Hook authentication |
+
+**Note:** OAuth tokens (`sk-ant-oat01-...`) are recommended. Generate with `claude setup-token`.
 
 ## Volume Mounting Strategies
 
@@ -187,6 +200,7 @@ volumes:
 | Issue | Solution |
 |-------|----------|
 | Claude not responding | Check `docker logs claude-slack-docker` |
+| "Invalid API key" error | Use OAuth token (`claude setup-token`) or valid API key |
 | No files in /workspace | Verify volume mounts in docker-compose.yml |
 | Can't clone repos | Mount ~/.ssh for git access |
 | "ANTHROPIC_API_KEY not set" | Add to .env file |
