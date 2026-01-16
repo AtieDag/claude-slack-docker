@@ -72,8 +72,9 @@ class PTYController:
                 env["TERM"] = "xterm-256color"
                 env["HOME"] = os.environ.get("HOME", "/root")
 
-                # Execute Claude Code - interactive mode
-                os.execvpe("claude", ["claude"], env)
+                # Execute Claude Code - interactive mode with auto-approval
+                # --dangerously-skip-permissions: auto-approve all tool uses (needed for Slack since approvals can't be relayed)
+                os.execvpe("claude", ["claude", "--dangerously-skip-permissions"], env)
 
             else:
                 # Parent process

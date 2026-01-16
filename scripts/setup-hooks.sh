@@ -16,29 +16,27 @@ mkdir -p "$HOOK_DIR"
 cp /app/hooks/slack_hook.py "$HOOK_DIR/"
 chmod +x "$HOOK_DIR/slack_hook.py"
 
-# Initialize per-repo .claude/hooks directories
-echo "Initializing per-repo .claude/hooks directories..."
+# Initialize per-repo .claude directories (trust settings only, NOT hooks)
+# NOTE: We do NOT copy hooks to per-repo .claude/hooks because those directories
+# are bind-mounted from the host. If we copied hooks there, local Claude sessions
+# on the host would also use them and post to the bridge unintentionally.
+echo "Initializing per-repo .claude directories..."
 if [ -d "$WORKSPACE_DIR" ]; then
     for repo_dir in "$WORKSPACE_DIR"/*/; do
         if [ -d "$repo_dir" ]; then
             repo_name=$(basename "$repo_dir")
-            repo_hook_dir="${repo_dir}.claude/hooks"
-
-            echo "  Setting up hooks in: $repo_dir"
-            mkdir -p "$repo_hook_dir"
-
-            # Copy hook script to per-repo location
-            cp /app/hooks/slack_hook.py "$repo_hook_dir/"
-            chmod +x "$repo_hook_dir/slack_hook.py"
-
-            # Create per-repo trust settings
             repo_projects_dir="${repo_dir}.claude"
+
+            echo "  Setting up .claude in: $repo_dir"
+            mkdir -p "$repo_projects_dir"
+
+            # Create per-repo trust settings (but NOT hooks)
             cat > "$repo_projects_dir/settings.json" << 'EOF'
 {
   "trusted": true
 }
 EOF
-            echo "    Created: $repo_hook_dir"
+            echo "    Created: $repo_projects_dir/settings.json"
         fi
     done
 fi

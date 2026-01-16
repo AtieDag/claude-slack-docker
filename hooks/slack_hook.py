@@ -19,33 +19,21 @@ import urllib.request
 BRIDGE_URL = os.environ.get("CLAUDE_SLACK_BRIDGE_URL", "http://localhost:9876")
 
 
-def get_repo_claude_dir() -> str:
-    """Get the .claude directory for the current repo.
-
-    Uses CLAUDE_REPO_ROOT env var if set, otherwise uses current working directory.
-    Falls back to global ~/.claude if per-repo doesn't exist.
-    """
-    # Check for explicit repo root from environment
-    repo_root = os.environ.get("CLAUDE_REPO_ROOT", os.getcwd())
-    repo_claude_dir = os.path.join(repo_root, ".claude", "hooks")
-
-    # If per-repo .claude/hooks exists, use it
-    if os.path.isdir(repo_claude_dir):
-        return repo_claude_dir
-
-    # Fall back to global ~/.claude/hooks for backward compatibility
-    global_claude_dir = os.path.expanduser("~/.claude/hooks")
-    return global_claude_dir
+# State files are always in global ~/.claude/hooks to avoid writing to
+# bind-mounted repo directories (which would be visible on the host)
+HOOKS_DIR = os.path.expanduser("~/.claude/hooks")
+STATE_FILE = os.path.join(HOOKS_DIR, ".slack_hook_state")
+CHANNEL_STATE_FILE = os.path.join(HOOKS_DIR, ".current_channel")
 
 
 def get_state_file() -> str:
     """Get the state file path for deduplication."""
-    return os.path.join(get_repo_claude_dir(), ".slack_hook_state")
+    return STATE_FILE
 
 
 def get_channel_state_file() -> str:
     """Get the channel state file path."""
-    return os.path.join(get_repo_claude_dir(), ".current_channel")
+    return CHANNEL_STATE_FILE
 
 
 def get_message_hash(message: str) -> str:

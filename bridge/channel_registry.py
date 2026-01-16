@@ -73,30 +73,16 @@ class ChannelRegistry:
     ) -> None:
         """Write current channel to state file for hook to read.
 
-        Writes to per-repo .claude/hooks/.current_channel if repo_path is provided
-        and the .claude/hooks directory exists, otherwise falls back to global.
+        Always uses global ~/.claude/hooks/.current_channel to avoid
+        writing to bind-mounted repo directories (which would be visible
+        on the host and could interfere with local Claude sessions).
         """
-        # Determine state file location
-        if repo_path:
-            repo_state_dir = os.path.join(repo_path, ".claude", "hooks")
-            if os.path.isdir(repo_state_dir):
-                state_file = os.path.join(repo_state_dir, ".current_channel")
-                logger.debug(f"Writing channel state to per-repo: {state_file}")
-            else:
-                # Per-repo .claude/hooks doesn't exist, use global
-                state_file = GLOBAL_CHANNEL_STATE_FILE
-                logger.debug(
-                    f"Per-repo .claude/hooks not found at {repo_state_dir}, "
-                    f"using global: {state_file}"
-                )
-        else:
-            state_file = GLOBAL_CHANNEL_STATE_FILE
-            logger.debug(f"No repo path, using global state file: {state_file}")
-
+        state_file = GLOBAL_CHANNEL_STATE_FILE
         try:
             os.makedirs(os.path.dirname(state_file), exist_ok=True)
             with open(state_file, "w") as f:
                 f.write(channel_id)
+            logger.debug(f"Wrote channel state to {state_file}")
         except OSError as e:
             logger.error(f"Failed to write channel state to {state_file}: {e}")
 
